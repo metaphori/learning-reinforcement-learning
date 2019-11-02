@@ -1,3 +1,4 @@
 .idea
 bin/
 venv
+.mypy_cache/

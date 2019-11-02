@@ -17,7 +17,7 @@ ValueEstimates = Dict[Action, ActionValue]
 
 
 def estimate_value(action: Action, history: History, action_data) -> float:
-    tot_reward, num_adoptions = action_data.get(action, (0,0))
+    num_adoptions, tot_reward = action_data.get(action, (0,0))
         #functools.reduce(lambda a, b: map(sum, zip(*[a, b])),
         #                 [(step[1], 1) for step in history if step[0] == action],
         #                 (0, 0))
@@ -29,9 +29,12 @@ def estimate_value(action: Action, history: History, action_data) -> float:
 
 def greedy_action_selection(problem: Problem, value_estimates: ValueEstimates, epsilon: float) -> Action:
     if random.random() >= epsilon:  # greedy action selection
-        index = np.argmax(value_estimates.values()) # NB: if multiple maxes, chooses the first
+        #print("Greedy selection")
+        index = np.argmax(list(value_estimates.values())) # NB: if multiple maxes, chooses the first
+        # NOTE: dict.values() returns a dict_items() which breaks np.argmax
     else:  # explore randomly
-        index = problem.randrange(len(problem))
+        #print("Random selection")
+        index = random.randrange(len(problem))
     return index
 
 
@@ -45,15 +48,16 @@ def single_run_step(problem: Problem, epsilon: float, estimated_value, history: 
     actual_reward = np.random.normal(mean, variance)
 
     prev = action_data.get(chosen_action, [0,0])
+    #print("Given {}. \nChoose {} with reward {}\naction data {}\nhistory {}".format(estimated_value, chosen_action, actual_reward, action_data, history))
+    #print("{}+1={}, {}+{}={}".format(prev[0],prev[0]+1,prev[1],actual_reward,prev[1]+actual_reward))
     action_data[chosen_action] = (prev[0]+1, prev[1]+actual_reward)
 
     history.append((chosen_action, actual_reward))
 
 def single_run(problem: Problem, epsilon: float, nsteps: int) -> History:
-    history: History = list()
-    action_data = dict()
-    estimated_value: Dict[ActionEntry] = dict( [(a[0], np.random.normal(a[1])) for a in problem] )
-    print(estimated_value)
+    history: int = list()
+    action_data: Dict[Action, (int,ActionValue)] = dict() # [(a[0], (1,np.random.normal(a[1]))) for a in problem] )
+    estimated_value: Dict[ActionEntry] = dict() # dict( [(a[0], np.random.normal(a[1])) for a in problem] )
     for i in range(nsteps):
         single_run_step(problem, epsilon, estimated_value, history, action_data)
         # print("Step {}: choice {}".format(i,history[i]))
@@ -63,38 +67,41 @@ print("K-ARMED BANDIT PROBLEM\n*****************\n")
 
 k: int = 10  # k-armed bandit problem
 
-num_problems: int = 1
-num_runs: int = 20
+#num_problems: int = 1
+num_runs: int = 2000
 num_timesteps: int = 1000
 problems: List[Problem] = []
 
 # 1. Generate problems
 mean: float = 0
 stdev: float = 1
-for i in range(0, num_problems):
+for i in range(0, num_runs):
     normalDistribSamples: np.ndarray = np.random.normal(mean, stdev, [10])
     problem: Problem = list(enumerate(normalDistribSamples))
     problems.append(problem)
 
-p1 = problems[0]
-
-histories = np.zeros((num_runs,num_timesteps,2))
-epsilon = 0
-for r in range(num_runs):
-    print("Run {}".format(r))
-    histories[r] = np.array(single_run(problem, epsilon, num_timesteps), dtype=(int,float))
-
-steps = np.arange(0, num_timesteps)
-
-# avg_reward = np.zeros((num_runs,num_timesteps)
-
-avg_reward = np.mean(histories[:,:,1], 0) # TODO: FIX THIS CALCULATION
-
-#avg_reward = []
-#for i in steps:
-#    tot_reward = functools.reduce(lambda x,y: x+y, [x[1] for x in p1_history[:i]], 0)
-#    avg_reward.append(tot_reward/(i+1))
+epsilon_greedy = 0
+epsilon_neargreedy = 0.01
+epsilon_notsogreedy = 0.1
+configs = [epsilon_greedy, epsilon_neargreedy, epsilon_notsogreedy]
+colors = ["red", "blue", "green"]
+labels = ["greedy", "near-greedy", "not-so-greedy"]
 
 plt.figure()
-plt.plot(steps, avg_reward, color="red", linewidth=2.5, linestyle="-", label="avg reward")
+plt.xlabel("time steps")
+plt.ylabel("avg reward")
+
+for k, epsilon in enumerate(configs):
+    histories = np.zeros((num_runs, num_timesteps, 2))
+    for r in range(num_runs):
+        #print("Run {}".format(r))
+        histories[r] = np.array(single_run(problems[r], epsilon, num_timesteps), dtype=(int, float))
+
+    avg_reward = np.mean(histories[:,:,1], 0)
+
+    steps = np.arange(0, num_timesteps)
+
+    plt.plot(steps, avg_reward, color=colors[k], linewidth=2.5, linestyle="-", label=labels[k])
+
+plt.legend(loc='lower right', frameon=False)
 plt.show()
