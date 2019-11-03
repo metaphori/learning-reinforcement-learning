@@ -101,7 +101,7 @@ class RLMethod(metaclass=abc.ABCMeta):
         self.description = description
 
     @abc.abstractmethod
-    def estimate_value(self, action_data: ActionHistoryData) -> ActionData: pass
+    def estimate_value(self, action_data: ActionHistoryData, old_estimates: ValueEstimates) -> ActionData: pass
 
     @abc.abstractmethod
     def action_selection(self, problem: Problem, value_estimates: ValueEstimates) -> Action: pass
@@ -114,13 +114,17 @@ class RLGreedyMethod(RLMethod):
         self.epsilon = epsilon
         self.plotting_info = plotting_info
 
-    def estimate_value(self, action_data: ActionHistoryData) -> float:
+    def estimate_value(self, action_data: ActionHistoryData, prev_estimates: ValueEstimates) -> float:
         #print("Estimating value of {} with history {}".format(action_data.action, action_data.data))
+
         num_adoptions = len(action_data)
-        if num_adoptions == 0:
-            return 0
+        if num_adoptions == 0: return 0
         else:
-            return action_data.total_reward() / num_adoptions
+            # return action_data.total_reward() / num_adoptions
+            # Avoid full recalculation through the following formula (see Sutton book par. 2.4)
+            prev_estimate = prev_estimates.actions[action_data.action]
+            prev_reward = action_data.data[-1][1]
+            return prev_estimate + (1.0/num_adoptions)*(prev_reward - prev_estimate)
 
     def action_selection(self, problem: Problem, value_estimates: ValueEstimates) -> Action:
         if random.random() >= self.epsilon:  # greedy action selection
@@ -138,10 +142,10 @@ class RLSimulator:
         self.history = History()
         self.time_step = 0
 
-    def single_run_step(self, estimates) -> None:
+    def single_run_step(self, estimates: ValueEstimates) -> None:
         # Estimate action value (sample-average method)
         for (action, _) in self.problem.actions.items():
-            e = self.method.estimate_value(self.history.actions_history_data[action])
+            e = self.method.estimate_value(self.history.actions_history_data[action], estimates)
             estimates.update_estimate(action, e)
         chosen_action = self.method.action_selection(problem, estimates)
         mean = problem[chosen_action].reward
@@ -172,8 +176,8 @@ print("K-ARMED BANDIT PROBLEM\n*****************\n")
 k: int = 10  # k-armed bandit problem
 
 #num_problems: int = 1
-num_runs: int = 2000
-num_timesteps: int = 2000
+num_runs: int = 1600
+num_timesteps: int = 2500
 problems: List[Problem] = []
 
 # 1. Generate problems
