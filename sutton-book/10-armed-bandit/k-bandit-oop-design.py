@@ -36,23 +36,23 @@ class ActionEntry:
 class ActionHistoryData:
     def __init__(self, action: Action):
         self.action = action
-        self.data = OrderedDict()
+        self.data: [[int,float]] = []
 
     def add_usage(self, time_step: int, actual_reward: float) -> None:
-        self.data[time_step] = actual_reward
+        self.data.append([time_step,actual_reward])
 
     def __len__(self):
         return len(self.data)
 
     def total_reward(self) -> float:
         #print(list(self.data.values()))
-        return functools.reduce(lambda a,b: a+b, list(self.data.values()))
+        return functools.reduce(lambda a,b: a+b[1], self.data, 0.)
 
     def __repr__(self): return str(self.data)
 
 class ActionsHistoryData:
     def __init__(self):
-        self.data = OrderedDict()
+        self.data = dict()
 
     def __getitem__(self, item) -> ActionHistoryData:
         if item not in self.data: self.data[item] = ActionHistoryData(item)
@@ -65,12 +65,12 @@ class ActionsHistoryData:
 
 class History:
     def __init__(self):
-        self.data: OrderedDict[int,ActionEntry] = OrderedDict()
+        self.data: [(int,ActionEntry)] = []
         self.actions_history_data = ActionsHistoryData()
 
     def add_action(self, time_step: int, action_entry: ActionEntry) -> None:
         a = action_entry.action
-        self.data[time_step] = action_entry
+        self.data.append((time_step,action_entry))
         self.actions_history_data[a].add_usage(time_step, action_entry.data.reward)
 
     def __repr__(self): return "History\n\t- {}\n\t- {}".format(str(self.data), str(self.actions_history_data))
@@ -97,14 +97,20 @@ class ValueEstimates:
 
 
 class RLMethod(metaclass=abc.ABCMeta):
+    def __init__(self, description):
+        self.description = description
+
     @abc.abstractmethod
     def estimate_value(self, action_data: ActionHistoryData) -> ActionData: pass
 
     @abc.abstractmethod
     def action_selection(self, problem: Problem, value_estimates: ValueEstimates) -> Action: pass
 
+    def __repr__(self): return self.description
+
 class RLGreedyMethod(RLMethod):
     def __init__(self, epsilon: float, plotting_info):
+        super().__init__("GreedyMethod[epsilon={}]".format(epsilon))
         self.epsilon = epsilon
         self.plotting_info = plotting_info
 
@@ -142,10 +148,10 @@ class RLSimulator:
         variance = 1
         actual_reward = np.random.normal(mean, variance)
 
-        prev = self.history.data.get(chosen_action, [0, 0])
-        print("Given {}. \nChoose {} with reward {}\nhistory {}".format(
-            estimates, chosen_action, actual_reward, self.history))
-        print("{}+1={}, {}+{}={}\n".format(prev[0],prev[0]+1,prev[1],actual_reward,prev[1]+actual_reward))
+        #prev = self.history.data.get(chosen_action, [0, 0])
+        #print("Given {}. \nChoose {} with reward {}\nhistory {}".format(
+        #    estimates, chosen_action, actual_reward, self.history))
+        #print("{}+1={}, {}+{}={}\n".format(prev[0],prev[0]+1,prev[1],actual_reward,prev[1]+actual_reward))
 
         entry = ActionEntry(chosen_action, ActionData(actual_reward))
         self.history.add_action(self.time_step, entry) # [chosen_action] = (prev[0] + 1, prev[1] + actual_reward)
@@ -166,8 +172,8 @@ print("K-ARMED BANDIT PROBLEM\n*****************\n")
 k: int = 10  # k-armed bandit problem
 
 #num_problems: int = 1
-num_runs: int = 1
-num_timesteps: int = 10
+num_runs: int = 2000
+num_timesteps: int = 2000
 problems: List[Problem] = []
 
 # 1. Generate problems
@@ -180,9 +186,9 @@ for i in range(0, num_runs):
 
 # 2. Configure simulations and plotting
 configs = [
-    RLGreedyMethod(epsilon=0, plotting_info={ "label": "greedy", "color": "red"}),
-    RLGreedyMethod(epsilon=0.01, plotting_info={ "label": "near-greedy", "color": "blue"}),
-    RLGreedyMethod(epsilon=0.1, plotting_info={ "label": "not-so-greedy", "color": "green"}),
+    RLGreedyMethod(epsilon=0, plotting_info={ "label": "greedy[0]", "color": "red"}),
+    RLGreedyMethod(epsilon=0.01, plotting_info={ "label": "near-greedy[0.01]", "color": "blue"}),
+    RLGreedyMethod(epsilon=0.1, plotting_info={ "label": "not-so-greedy[0.1]", "color": "green"}),
 ]
 
 plt.figure()
@@ -192,15 +198,14 @@ plt.ylabel("avg reward")
 # 3. Run simulations (1) for any configuration and (2) for any problem instance
 for k, method in enumerate(configs):
     histories = np.zeros((num_runs, num_timesteps, 2))
-    print("Run experiments for config ", method)
+    print("\nRun experiments for config ", method)
     for r in range(num_runs):
-        print(".", end='')
+        if r%10==0: print(".", end='')
         #print("Run {}".format(r))
         simulator = RLSimulator(method, problems[r])
         h = simulator.single_run(num_timesteps)
-        hh = [(k,v.data.reward) for (k,v) in h.data.items()]
-        #print(hh)
-        histories[r] = np.array(hh, dtype=(int, float))
+        hh = [[k,v.data.reward] for (k,v) in h.data]
+        histories[r] = np.array(hh)
 
     avg_reward = np.mean(histories[:,:,1], 0)
 
