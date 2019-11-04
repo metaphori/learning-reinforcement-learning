@@ -40,8 +40,6 @@ def greedy_action_selection(problem: Problem, value_estimates: ValueEstimates, e
 
 def single_run_step(problem: Problem, epsilon: float, estimated_value, history: History, action_data) -> None:
     # Estimate action value (sample-average method)
-    for (action, _) in problem:
-        estimated_value[action] = estimate_value(action, history, action_data)
     chosen_action = greedy_action_selection(problem, estimated_value, epsilon)
     mean = problem[chosen_action][1]
     variance = 1
@@ -51,6 +49,8 @@ def single_run_step(problem: Problem, epsilon: float, estimated_value, history: 
     #print("Given {}. \nChoose {} with reward {}\naction data {}\nhistory {}".format(estimated_value, chosen_action, actual_reward, action_data, history))
     #print("{}+1={}, {}+{}={}".format(prev[0],prev[0]+1,prev[1],actual_reward,prev[1]+actual_reward))
     action_data[chosen_action] = (prev[0]+1, prev[1]+actual_reward)
+
+    estimated_value[chosen_action] = estimate_value(chosen_action, history, action_data)
 
     history.append((chosen_action, actual_reward))
 

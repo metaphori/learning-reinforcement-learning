@@ -15,25 +15,19 @@ args = parser.parse_args()
 k: int = args.k # 10  # k-armed bandit problem
 num_runs: int = args.r
 num_timesteps: int = args.t
-problems: List[Problem] = []
 simtype = RLSimulatorNonStationary if args.nonstationary else RLSimulator
 
 print("Use ", simtype)
 
 if __name__ == '__main__':
     # 1. Generate problems
-    mean: float = 0
-    stdev: float = 1
-    for i in range(0, num_runs):
-        normalDistribSamples: np.ndarray = np.random.normal(mean, stdev, [k])
-        problem: Problem = Problem({ Action(k) : ActionData(v) for (k,v) in dict(enumerate(normalDistribSamples)).items()})
-        problems.append(problem)
+    problems: List[Problem] = generate_bandit_problems(k, num_runs)
 
     # 2. Configure simulations and plotting
     configs = [
-        RLGreedyMethod(epsilon=0, plotting_info={ "label": "greedy[0]", "color": "red"}),
-        RLGreedyMethod(epsilon=0.01, plotting_info={ "label": "near-greedy[0.01]", "color": "blue"}),
-        RLGreedyMethod(epsilon=0.1, plotting_info={ "label": "not-so-greedy[0.1]", "color": "green"}),
+        SimulationConfig(RLGreedyMethod(epsilon=0), plotting_info={ "label": "greedy[0]", "color": "red", "graph":Plots.AVG_REWARD }),
+        SimulationConfig(RLGreedyMethod(epsilon=0.01), plotting_info={ "label": "near-greedy[0.01]", "color": "blue", "graph":Plots.AVG_REWARD }),
+        SimulationConfig(RLGreedyMethod(epsilon=0.1), plotting_info={ "label": "not-so-greedy[0.1]", "color": "green", "graph":Plots.AVG_REWARD }),
     ]
 
     execute_and_plot(configs, num_runs, num_timesteps, problems, simtype)
