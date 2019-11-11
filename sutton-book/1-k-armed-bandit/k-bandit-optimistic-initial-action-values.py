@@ -12,11 +12,11 @@ from rlutils import *
 
 if __name__ == '__main__':
     # 1. Generate problems
-    num_runs = 200
-    time_steps = 1000
+    num_runs = 2000
+    time_steps = 800
     problems: List[Problem] = generate_bandit_problems(10, num_runs)
 
-    optimistic_initial_estimates = ValueEstimates({a: +5.0 for a in problems[0].actions})
+    optimistic_initial_estimates = ValueEstimates({a: +10.0 for a in problems[0].actions})
     realistic_initial_estimates  = ValueEstimates({a: +0.0 for a in problems[0].actions})
 
     #rlutils.rldebug = RLDebugger(debug_problems=problems, debug_within=range(998,1000))

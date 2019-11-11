@@ -6,6 +6,7 @@ import copy
 
 import numpy as np
 import matplotlib.pyplot as plt
+import math
 
 global rldebug
 
@@ -70,13 +71,13 @@ class ActionHistoryData:
 
 class ActionsHistoryData:
     def __init__(self):
-        self.data = dict()
+        self.data: Dict[Action,ActionHistoryData] = dict()
 
-    def __getitem__(self, item) -> ActionHistoryData:
+    def __getitem__(self, item: Action) -> ActionHistoryData:
         if item not in self.data: self.data[item] = ActionHistoryData(item)
         return self.data.get(item)
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: Action, value: ActionHistoryData):
         self.data[key] = value
 
     def __repr__(self): return str(self.data)
@@ -122,7 +123,7 @@ class RLMethod(metaclass=abc.ABCMeta):
     def estimate_value(self, action_data: ActionHistoryData, old_estimates: ValueEstimates) -> Reward: pass
 
     @abc.abstractmethod
-    def action_selection(self, problem: Problem, value_estimates: ValueEstimates) -> Action: pass
+    def action_selection(self, problem: Problem, value_estimates: ValueEstimates, action_data: ActionHistoryData, step: int) -> Action: pass
 
     def __repr__(self): return self.description
 
@@ -140,8 +141,6 @@ class RLGreedyMethod(RLMethod):
             .format(self.epsilon, self.step_size(1,None), self.step_size(10,None))
 
     def estimate_value(self, action_data: ActionHistoryData, prev_estimates: ValueEstimates) -> Reward:
-        #print("Estimating value of {} with history {}".format(action_data.action, action_data.data))
-
         num_adoptions = len(action_data)
         prev_estimate = prev_estimates.actions.get(action_data.action, 0)
 
@@ -155,7 +154,7 @@ class RLGreedyMethod(RLMethod):
             # rldebug.debug_step("{} + {} * ({} - {}) = {}".format(prev_estimate, step_size, prev_reward, prev_estimate, result))
             return result
 
-    def action_selection(self, problem: Problem, value_estimates: ValueEstimates) -> Action:
+    def action_selection(self, problem: Problem, value_estimates: ValueEstimates, action_data: ActionHistoryData, step: int) -> Action:
         if random.random() >= self.epsilon and len(value_estimates.actions)>0:  # greedy action selection
             potential_actions = Utils.all_maxes(value_estimates.actions)
             action = random.choice(potential_actions)
@@ -163,6 +162,27 @@ class RLGreedyMethod(RLMethod):
         else:  # explore randomly
             action = random.choice(list(problem.actions.keys()))
         return action
+
+class UCBMethod(RLGreedyMethod):
+    def __init__(self,
+                 c: float,
+                 epsilon: Reward = 0,  # default is fully greedy
+                 step_size=lambda n, a: 1.0 / n,  # default is the sample-average method
+                 ):
+        super().__init__(epsilon, step_size)
+        self.c = c
+
+    def __repr__(self):
+        return "UCBMethod[epsilon={}, c={}]".format(self.epsilon, self.c)
+
+    def action_selection(self, problem: Problem, value_estimates: ValueEstimates, action_data: ActionsHistoryData, step: int) -> Action:
+        # Adjust estimates to consider uncertainty
+        adjusted_estimates = ValueEstimates({a:
+            (
+                e + self.c*math.sqrt(math.log(step)/len(action_data[a].data)) if len(action_data[a].data)>0 else float("inf")
+            ) for a, e in value_estimates.actions.items()
+                                            })
+        return super().action_selection(problem, adjusted_estimates, action_data, step)
 
 class Utils:
     @classmethod
@@ -223,7 +243,7 @@ class RLSimulator:
         rldebug.set_current_problem(problem)
 
     def single_run_step(self, estimates: ValueEstimates) -> None:
-        chosen_action = self.config.method.action_selection(self.problem, estimates)
+        chosen_action = self.config.method.action_selection(self.problem, estimates, self.history.actions_history_data, self.time_step)
         mean = self.problem[chosen_action].reward
         variance = 1
         actual_reward = np.random.normal(mean, variance)
@@ -237,7 +257,6 @@ class RLSimulator:
 
         entry = ActionEntry(chosen_action, ActionData(actual_reward, optimal))
         self.history.add_action(self.time_step, entry) # [chosen_action] = (prev[0] + 1, prev[1] + actual_reward)
-        #self.history.append((chosen_action, actual_reward))
 
         # Update estimate of action value
         ne = self.config.method.estimate_value(self.history.actions_history_data[chosen_action], estimates)
